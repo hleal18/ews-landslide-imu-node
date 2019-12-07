@@ -12,8 +12,7 @@
 #undef BUILTIN_LED
 #define BUILTIN_LED 21
 
-char s[32]; // used to sprintf for Serial output
-uint8_t txBuffer[9];
+
 
 // These callbacks are only used in over-the-air activation, so they are
 // left empty here (we cannot leave them out completely unless
@@ -44,23 +43,13 @@ void onEvent(ev_t ev)
     case EV_TXCOMPLETE:
         Serial.println(F("EV_TXCOMPLETE (includes waiting for RX windows)"));
         digitalWrite(BUILTIN_LED, LOW);
-        if (LMIC.txrxFlags & TXRX_ACK)
-        {
-            Serial.println(F("Received Ack"));
-        }
-        if (LMIC.dataLen)
-        {
-            sprintf(s, "Received %i bytes of payload", LMIC.dataLen);
-            Serial.println(s);
-            sprintf(s, "RSSI %d SNR %.1d", LMIC.rssi, LMIC.snr);
-            Serial.println(s);
-        }
         // Schedule next transmission
         //esp_sleep_enable_timer_wakeup(TX_INTERVAL*1000000);
         //esp_deep_sleep_start();
         delay(TX_INTERVAL * 1000);
         do_send(&sendjob);
         break;
+    }
 }
 
 void do_send(osjob_t *j)
@@ -131,7 +120,7 @@ void setup()
     LMIC.dn2Dr = DR_SF9;
 
     // Set data rate and transmit power for uplink (note: txpow seems to be ignored by the library)
-    LMIC_setDrTxpow(DR_SF10, 14);
+    LMIC_setDrTxpow(DR_SF12, 14);
 
     do_send(&sendjob);
     pinMode(BUILTIN_LED, OUTPUT);
@@ -140,6 +129,5 @@ void setup()
 
 void loop()
 {
-
     os_runloop_once();
 }
