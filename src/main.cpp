@@ -95,29 +95,41 @@ void do_send(osjob_t *j)
 
     Axis<double> temp_axis;
     VariableType selectedVariableType = sensor[sensor_index].variableType;
-    
-    for(int i = 0; i < epoch_size; i++) {
+
+    for (int i = 0; i < epoch_size; i++)
+    {
         temp_axis = (selectedVariableType == ACCELERATION) ? imu_unit.get_acceleration() : imu_unit.get_rotation_rate();
         sensor_axis_readings[i].x = temp_axis.x;
         sensor_axis_readings[i].y = temp_axis.y;
         sensor_axis_readings[i].z = temp_axis.z;
     }
-    
+
+    Axis<int8_t> sum;
+    Axis<int8_t> avg;
+    // Filter variables by average
+    for (int i = 0; i < epoch_size; i++)
+    {
+        sum.x += sensor_axis_readings[i].x;
+        sum.y += sensor_axis_readings[i].y;
+        sum.z += sensor_axis_readings[i].z;
+    }
+
+    avg.x = sum.x / epoch_size;
+    avg.y = sum.y / epoch_size;
+    avg.z = sum.z / epoch_size;
+
     counter++;
-    
+
     // Two extra bytes for: Sensor Id (different from device Id) and Variable type.
     // Epoch_size times three because each entry on buffer is for three axes: x, y, z.
-    uint8_t buffer[epoch_size * 3 + 2];
+    uint8_t buffer[3 + 2];
 
     buffer[0] = sensor[sensor_index].id_sensor;
     buffer[1] = sensor[sensor_index].variableType;
-    
-    for (int i = 2, sensind = 0; i < epoch_size * 3 + 2; i += 3, sensind++)
-    {
-        buffer[i] = sensor_axis_readings[sensind].x;
-        buffer[i + 1] = sensor_axis_readings[sensind].y;
-        buffer[i + 2] = sensor_axis_readings[sensind].z;
-    }
+
+    buffer[2] = avg.x;
+    buffer[3] = avg.y;
+    buffer[4] = avg.z;
 
     LMIC_setTxData2(1, buffer, sizeof(buffer), 0);
     Serial.println(F("Packet queued"));
