@@ -16,7 +16,7 @@
 #undef BUILTIN_LED
 #define BUILTIN_LED 21
 
-enum Variable_Type
+enum VariableType
 {
     ACCELERATION = 0,
     ROTATION_RATE
@@ -24,14 +24,13 @@ enum Variable_Type
 
 struct Sensor
 {
-    Variable_Type variable_type;
+    VariableType variableType;
     uint8_t id_sensor;
 };
 
 const int epoch_size = 15;
 IMUSensor imu_unit;
-Axis<int8_t> acceleration_readings[epoch_size];
-Axis<int8_t> rotation_rate_readings[epoch_size];
+Axis<int8_t> sensor_axis_readings[epoch_size];
 uint8_t sensor_index = 0;
 Sensor sensor[2] = {{ACCELERATION, 1}, {ROTATION_RATE, 2}};
 
@@ -92,56 +91,35 @@ void onEvent(ev_t ev)
 void do_send(osjob_t *j)
 {
     Serial.print("Variable type: ");
-    Serial.println(sensor[sensor_index].variable_type);
+    Serial.println(sensor[sensor_index].variableType);
 
     Axis<double> temp_axis;
-
-    if (sensor[sensor_index].variable_type == ACCELERATION)
-    {
-        for (int i = 0; i < epoch_size; i++)
-        {
-            temp_axis = imu_unit.get_acceleration();
-            acceleration_readings[i].x = temp_axis.x;
-            acceleration_readings[i].y = temp_axis.y;
-            acceleration_readings[i].z = temp_axis.z;
-            print_acceleration(acceleration_readings[i]);
-        }
+    VariableType selectedVariableType = sensor[sensor_index].variableType;
+    
+    for(int i = 0; i < epoch_size; i++) {
+        temp_axis = (selectedVariableType == ACCELERATION) ? imu_unit.get_acceleration() : imu_unit.get_rotation_rate();
+        sensor_axis_readings[i].x = temp_axis.x;
+        sensor_axis_readings[i].y = temp_axis.y;
+        sensor_axis_readings[i].z = temp_axis.z;
     }
-    else if (sensor[sensor_index].variable_type == ROTATION_RATE)
-    {
-        for (int i = 0; i < epoch_size; i++)
-        {
-            temp_axis = imu_unit.get_rotation_rate();
-            rotation_rate_readings[i].x = temp_axis.x;
-            rotation_rate_readings[i].y = temp_axis.y;
-            rotation_rate_readings[i].z = temp_axis.z;
-            print_acceleration(rotation_rate_readings[i]);
-        }
-    }
+    
     counter++;
+    
+    // Two extra bytes for: Sensor Id (different from device Id) and Variable type.
+    // Epoch_size times three because each entry on buffer is for three axes: x, y, z.
+    uint8_t buffer[epoch_size * 3 + 2];
 
-    uint8_t arrBuff[epoch_size * 3 + 2];
-
-    arrBuff[0] = sensor[sensor_index].id_sensor;
-    arrBuff[1] = sensor[sensor_index].variable_type;
-
-    for (int i = 2, accind = 0; i < epoch_size * 3 + 2; i += 3, accind++)
+    buffer[0] = sensor[sensor_index].id_sensor;
+    buffer[1] = sensor[sensor_index].variableType;
+    
+    for (int i = 2, sensind = 0; i < epoch_size * 3 + 2; i += 3, sensind++)
     {
-        if (sensor[sensor_index].variable_type == ACCELERATION)
-        {
-            arrBuff[i] = acceleration_readings[accind].x;
-            arrBuff[i + 1] = acceleration_readings[accind].y;
-            arrBuff[i + 2] = acceleration_readings[accind].z;
-        }
-        else if (sensor[sensor_index].variable_type == ROTATION_RATE)
-        {
-            arrBuff[i] = rotation_rate_readings[accind].x;
-            arrBuff[i + 1] = rotation_rate_readings[accind].y;
-            arrBuff[i + 2] = rotation_rate_readings[accind].z;
-        }
+        buffer[i] = sensor_axis_readings[sensind].x;
+        buffer[i + 1] = sensor_axis_readings[sensind].y;
+        buffer[i + 2] = sensor_axis_readings[sensind].z;
     }
 
-    LMIC_setTxData2(1, arrBuff, sizeof(arrBuff), 0);
+    LMIC_setTxData2(1, buffer, sizeof(buffer), 0);
     Serial.println(F("Packet queued"));
     digitalWrite(BUILTIN_LED, HIGH);
 
