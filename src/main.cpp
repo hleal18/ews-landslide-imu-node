@@ -22,11 +22,19 @@ enum Variable_Type
     ROTATION_RATE
 };
 
+struct Sensor
+{
+    Variable_Type variable_type;
+    uint8_t id_sensor;
+};
+
 const int epoch_size = 15;
 IMUSensor imu_unit;
 Axis<int8_t> acceleration_readings[epoch_size];
 Axis<int8_t> rotation_rate_readings[epoch_size];
-unsigned int variable_type = 0;
+uint8_t sensor_index = 0;
+Sensor sensor[2] = {{ACCELERATION, 1}, {ROTATION_RATE, 2}};
+
 //Frequency of measures to take during a second.
 //int freq_measures = 1000 / 5;
 // Counter to know which measures are going to be sent
@@ -84,11 +92,11 @@ void onEvent(ev_t ev)
 void do_send(osjob_t *j)
 {
     Serial.print("Variable type: ");
-    Serial.println(variable_type);
+    Serial.println(sensor[sensor_index].variable_type);
 
     Axis<double> temp_axis;
 
-    if (variable_type == ACCELERATION)
+    if (sensor[sensor_index].variable_type == ACCELERATION)
     {
         for (int i = 0; i < epoch_size; i++)
         {
@@ -99,7 +107,7 @@ void do_send(osjob_t *j)
             print_acceleration(acceleration_readings[i]);
         }
     }
-    else if (variable_type == ROTATION_RATE)
+    else if (sensor[sensor_index].variable_type == ROTATION_RATE)
     {
         for (int i = 0; i < epoch_size; i++)
         {
@@ -112,19 +120,20 @@ void do_send(osjob_t *j)
     }
     counter++;
 
-    uint8_t arrBuff[epoch_size * 3 + 1];
+    uint8_t arrBuff[epoch_size * 3 + 2];
 
-    arrBuff[0] = variable_type;
+    arrBuff[0] = sensor[sensor_index].id_sensor;
+    arrBuff[1] = sensor[sensor_index].variable_type;
 
-    for (int i = 1, accind = 0; i < epoch_size * 3 + 1; i += 3, accind++)
+    for (int i = 2, accind = 0; i < epoch_size * 3 + 2; i += 3, accind++)
     {
-        if (variable_type == ACCELERATION)
+        if (sensor[sensor_index].variable_type == ACCELERATION)
         {
             arrBuff[i] = acceleration_readings[accind].x;
             arrBuff[i + 1] = acceleration_readings[accind].y;
             arrBuff[i + 2] = acceleration_readings[accind].z;
         }
-        else if (variable_type == ROTATION_RATE)
+        else if (sensor[sensor_index].variable_type == ROTATION_RATE)
         {
             arrBuff[i] = rotation_rate_readings[accind].x;
             arrBuff[i + 1] = rotation_rate_readings[accind].y;
@@ -136,8 +145,8 @@ void do_send(osjob_t *j)
     Serial.println(F("Packet queued"));
     digitalWrite(BUILTIN_LED, HIGH);
 
-    variable_type = (variable_type == 1) ? 0 : 1;
-    storage_manager.putUInt("variable_type", variable_type);
+    sensor_index = (sensor_index == 1) ? 0 : 1;
+    storage_manager.putUInt("sensor_index", sensor_index);
     storage_manager.end();
 }
 
@@ -152,7 +161,7 @@ void setup()
 
     // Starting storage functions.
     storage_manager.begin("variables_state", false);
-    variable_type = storage_manager.getUInt("variable_type", 0);
+    sensor_index = storage_manager.getUInt("sensor_index", 0);
 
     // LMIC init
     os_init();
